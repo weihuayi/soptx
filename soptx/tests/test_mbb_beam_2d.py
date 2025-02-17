@@ -5,6 +5,8 @@ from typing import Literal, Optional, Union, Dict, Any
 from pathlib import Path
 
 from fealpy.backend import backend_manager as bm
+from fealpy.typing import TensorLike
+from fealpy.decorator import cartesian
 from fealpy.mesh import UniformMesh2d, TriangleMesh
 from fealpy.functionspace import LagrangeFESpace, TensorFunctionSpace
 
@@ -67,13 +69,14 @@ def create_base_components(config: TestConfig):
         bm.set_backend('pytorch')
 
     if config.pde_type == 'mbb_beam_2d_1':
-        extent = [0, config.nx, 0, config.ny]
-        origin = [0.0, 0.0]
         pde = MBBBeam2dData1(
-                    xmin=0, xmax=extent[1] * config.hx,
-                    ymin=0, ymax=extent[3] * config.hy
+                    xmin=0, xmax=config.domain_length,
+                    ymin=0, ymax=config.domain_width,
+                    T = config.load
                 )
         if config.mesh_type == 'uniform_mesh_2d':
+            extent = [0, config.nx, 0, config.ny]
+            origin = [0.0, 0.0]
             mesh = UniformMesh2d(
                         extent=extent, h=[config.hx, config.hy], origin=origin,
                         ipoints_ordering='yx', flip_direction='y',
@@ -107,8 +110,13 @@ def create_base_components(config: TestConfig):
                 solver_params=config.solver_params 
             )
     
-    array = config.volume_fraction * bm.ones(mesh.number_of_cells(), dtype=bm.float64)
-    rho = space_D.function(array)
+    node = mesh.entity('node')
+    kwargs = bm.context(node)
+    @cartesian
+    def density_func(x: TensorLike):
+        val = config.volume_fraction * bm.ones(x.shape[0], **kwargs)
+        return val
+    rho = space_D.interpolate(u=density_func)
 
     objective = ComplianceObjective(solver=solver)
     constraint = VolumeConstraint(solver=solver, 
@@ -247,5 +255,5 @@ if __name__ == "__main__":
                             save_dir=f'{base_dir}/{pde_type}_{optimizer_type}_{filter_type}',
                         )
     # result1 = run_basic_filter_test(config_sens_filter)
-    # result2 = run_basic_filter_test(config_dens_filter)
-    result3 = run_basic_filter_test(config_heav_filter)
+    result2 = run_basic_filter_test(config_dens_filter)
+    # result3 = run_basic_filter_test(config_heav_filter)

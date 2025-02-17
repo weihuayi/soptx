@@ -20,7 +20,7 @@ class ObjectiveBase(ABC):
         Parameters
         ----------
         rho : 密度场
-        u : 可选的位移场，如果为None则由实现类决定如何获取
+        u : 可选的位移场, 如果为 None 则由实现类决定如何获取
         
         Returns
         -------
