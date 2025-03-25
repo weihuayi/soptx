@@ -249,7 +249,7 @@ if __name__ == "__main__":
                                 load=-1,
                                 volume_fraction=0.5,
                                 penalty_factor=3.0,
-                                mesh_type='uniform_mesh_2d', nx=150, ny=100, hx=1, hy=1,
+                                mesh_type='uniform_mesh_2d', nx=15, ny=10, hx=1, hy=1,
                                 assembly_method=AssemblyMethod.FAST,
                                 solver_type='direct', solver_params={'solver_type': 'mumps'},
                                 diff_mode=None,

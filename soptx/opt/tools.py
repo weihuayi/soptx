@@ -37,7 +37,7 @@ class OptimizationHistory:
         
         if verbose:
             print(f"Iteration: {iter_idx + 1}, "
-                  f"Objective: {obj_val:.12f}, "
+                  f"Objective: {obj_val:.4f}, "
                   f"Volfrac: {volfrac:.4f}, "
                   f"Change: {change:.4f}, "
                   f"Time: {time_cost:.3f} sec")

@@ -7,6 +7,7 @@ from fealpy.typing import TensorLike, Union
 from fealpy.mesh import HomogeneousMesh, SimplexMesh, TensorMesh, StructuredMesh
 from fealpy.functionspace import TensorFunctionSpace
 from fealpy.fem import LinearElasticIntegrator, BilinearForm, DirichletBC
+from fealpy.fem.dirichlet_bc import apply_csr_matrix
 from fealpy.sparse import CSRTensor
 from fealpy.solver import cg, spsolve
 
@@ -296,6 +297,40 @@ class ElasticFEMSolver:
 
         return F
     
+    def _apply_matrix_jax(self, A: CSRTensor, isDDof: TensorLike):
+        isIDof = bm.logical_not(isDDof)
+        crow = A.crow
+        col = A.col
+        indices_context = bm.context(col)
+        ZERO = bm.array([0], **indices_context)
+
+        nnz_per_row = crow[1:] - crow[:-1]
+        remain_flag = bm.repeat(isIDof, nnz_per_row) & isIDof[col] # 保留行列均为内部自由度的非零元素
+        rm_cumsum = bm.concat([ZERO, bm.cumsum(remain_flag, axis=0)], axis=0) # 被保留的非零元素数量累积
+        nnz_per_row = rm_cumsum[crow[1:]] - rm_cumsum[crow[:-1]] + isDDof # 计算每行的非零元素数量
+
+        new_crow = bm.cumsum(bm.concat([ZERO, nnz_per_row], axis=0), axis=0)
+
+        NNZ = new_crow[-1]
+        non_diag = bm.ones((NNZ,), dtype=bm.bool, device=bm.get_device(isDDof)) # Field: non-zero elements
+        loc_flag = bm.logical_and(new_crow[:-1] < NNZ, isDDof)
+        non_diag = bm.set_at(non_diag, new_crow[:-1][loc_flag], False)
+
+        # 修复：只选取适当数量的值对应设置
+        # 找出所有边界DOF对应的行索引
+        bd_rows = bm.where(loc_flag)[0]
+        new_col = bm.empty((NNZ,), **indices_context)
+        # 设置为相应行的边界DOF位置
+        new_col = bm.set_at(new_col, new_crow[:-1][loc_flag], bd_rows)
+        # 设置非对角元素的列索引
+        new_col = bm.set_at(new_col, non_diag, col[remain_flag])
+
+        new_values = bm.empty((NNZ,), **A.values_context())
+        new_values = bm.set_at(new_values, new_crow[:-1][loc_flag], 1.)
+        new_values = bm.set_at(new_values, non_diag, A.values[remain_flag])
+
+        return CSRTensor(new_crow, new_col, new_values, A.sparse_shape)
+    
     def _apply_boundary_conditions(self, K: CSRTensor, F: TensorLike) -> tuple[CSRTensor, TensorLike]:
         """应用边界条件"""
         dirichlet = self.pde.dirichlet
@@ -312,19 +347,22 @@ class ElasticFEMSolver:
         
         dbc = DirichletBC(space=self.tensor_space, gd=dirichlet,
                         threshold=threshold, method='interp')
-        K = dbc.apply_matrix(matrix=K, check=True)
+        if bm.backend_name == 'jax':
+            K = self._apply_matrix_jax(A=K, isDDof=isBdDof)
+        else:
+            K = dbc.apply_matrix(matrix=K, check=True)
         
         return K, F
 
     #---------------------------------------------------------------------------
     # 求解方法
     #---------------------------------------------------------------------------
-    def solve(self) -> Union[IterativeSolverResult, DirectSolverResult]:
+    def solve(self, enable_timing: bool = False) -> Union[IterativeSolverResult, DirectSolverResult]:
         """统一的求解接口"""
         if self.solver_type == 'cg':
-            return self.solve_cg(**self.solver_params)
+            return self.solve_cg(enable_timing=enable_timing, **self.solver_params)
         elif self.solver_type == 'direct':
-            return self.solve_direct(**self.solver_params)
+            return self.solve_direct(enable_timing=enable_timing, **self.solver_params)
         else:
             raise ValueError(f"Unsupported solver type: {self.solver_type}")
                
@@ -332,7 +370,9 @@ class ElasticFEMSolver:
                 maxiter: int = 5000,
                 atol: float = 1e-12,
                 rtol: float = 1e-12,
-                x0: Optional[TensorLike] = None) -> IterativeSolverResult:
+                x0: Optional[TensorLike] = None,
+                enable_timing: bool = False,
+            ) -> IterativeSolverResult:
         """使用共轭梯度法求解
         
         Parameters
@@ -344,14 +384,22 @@ class ElasticFEMSolver:
         if self._current_density is None:
             raise ValueError("Density not set. Call update_density first.")
     
-        t = timer(f"CG Solver Timing")
-        next(t)
+        t = None
+        if enable_timing:
+            t = timer(f"CG Solver Timing")
+            next(t)
+            
         K0 = self._assemble_global_stiffness_matrix()
-        t.send('矩阵组装时间')
+        
+        if enable_timing:
+            t.send('矩阵组装时间')
+            
         F0 = self._assemble_global_force_vector()
-
         K, F = self._apply_boundary_conditions(K0, F0)
-        t.send('其他')
+        
+        if enable_timing:
+            t.send('其他')
+            
         uh = self.tensor_space.function()
 
         try:
@@ -360,28 +408,46 @@ class ElasticFEMSolver:
             uh[:] = cg(K, F[:], x0=x0, atol=atol, rtol=rtol, maxit=maxiter)
         except Exception as e:
             raise RuntimeError(f"CG solver failed: {str(e)}")
-        t.send('求解时间')
-        t.send(None)
+        
+        if enable_timing:
+            t.send('求解时间')
+            t.send(None)
+
         return IterativeSolverResult(displacement=uh)
     
-    def solve_direct(self, solver_type: str = 'mumps') -> DirectSolverResult:
+    def solve_direct(self, 
+                    solver_type: str = 'mumps', 
+                    enable_timing: bool = False
+                ) -> DirectSolverResult:
         """使用直接法求解"""
         if self._current_density is None:
             raise ValueError("Density not set. Call update_density first.")
         
-        t = timer(f"MUMPS Solver Timing")
-        next(t)
+        t = None
+        if enable_timing:
+            t = timer(f"MUMPS Solver Timing")
+            next(t)
+            
         K0 = self._assemble_global_stiffness_matrix()
-        t.send('矩阵组装时间')
-        F0 = self._assemble_global_force_vector()
         
+        if enable_timing:
+            t.send('矩阵组装时间')
+            
+        F0 = self._assemble_global_force_vector()
         K, F = self._apply_boundary_conditions(K0, F0)
-        t.send('其他')
+        
+        if enable_timing:
+            t.send('其他')
+            
         uh = self.tensor_space.function()
+
         try:
             uh[:] = spsolve(K, F[:], solver=solver_type)
         except Exception as e:
             raise RuntimeError(f"Direct solver failed: {str(e)}")
-        t.send('求解时间')
-        t.send(None)
+        
+        if enable_timing:
+            t.send('求解时间')
+            t.send(None)
+
         return DirectSolverResult(displacement=uh)

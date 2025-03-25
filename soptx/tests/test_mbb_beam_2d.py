@@ -284,15 +284,17 @@ if __name__ == "__main__":
     '''
     参数来源论文: Efficient topology optimization in MATLAB using 88 lines of code
     '''
-    backend = 'numpy'
+    # backend = 'numpy'
+    # backend = 'pytorch'
+    backend = 'jax'
     pde_type = 'mbb_beam_2d_1'
     mesh_type = 'uniform_mesh_2d'
     # mesh_type = 'triangle_mesh'
-    # nx, ny = 60, 20
-    nx, ny = 150, 50
+    nx, ny = 60, 20
+    # nx, ny = 150, 50
     # nx ,ny = 300, 100
-    # optimizer_type = 'oc'
-    optimizer_type = 'mma'
+    optimizer_type = 'oc'
+    # optimizer_type = 'mma'
     filter_type = 'sensitivity'
     # filter_type = 'density'
     filter_radius = nx * 0.04
@@ -311,34 +313,13 @@ if __name__ == "__main__":
         assembly_method=AssemblyMethod.FAST,
         solver_type='direct', solver_params={'solver_type': 'mumps'},
         # solver_type='cg', solver_params={'maxiter': 2000, 'atol': 1e-12, 'rtol': 1e-12},
-        diff_mode='manual',
+        # diff_mode='manual',
+        diff_mode='auto',
         optimizer_type=optimizer_type, max_iterations=200, tolerance=0.01,
         filter_type=filter_type, filter_radius=filter_radius,
         save_dir=f'{base_dir}/{backend}_{pde_type}_{mesh_type}_{optimizer_type}_{filter_type}_{nx*ny}',
         )
-    
-    diff_modo = 'auto'
-    nx, ny = 150, 50
-    hx, hy = 1, 1
-    backend = 'pytorch'
-    config_sens_filter_auto = TestConfig(
-        backend=backend,
-        pde_type=pde_type,
-        elastic_modulus=1, poisson_ratio=0.3, minimal_modulus=1e-9,
-        domain_length=nx, domain_width=ny,
-        load=-1,
-        volume_fraction=0.5,
-        penalty_factor=3.0,
-        mesh_type='uniform_mesh_2d', nx=nx, ny=ny, hx=hy, hy=hy,
-        p=1,
-        assembly_method=AssemblyMethod.FAST,
-        solver_type='direct', solver_params={'solver_type': 'mumps'},
-        diff_mode=diff_modo,
-        optimizer_type='oc', max_iterations=200, tolerance=0.01,
-        filter_type='sensitivity', filter_radius=nx*0.04,
-        save_dir=f'{base_dir}/{backend}_{pde_type}_{optimizer_type}_{filter_type}_{nx*ny}_{diff_modo}',
-    )
 
-    # result1 = run_basic_filter_test(config_basic_filter)
+
     # result_11 = run_diff_mode_test(config_sens_filter_auto)
     result2 = run_basic_filter_test(config_basic_filter)

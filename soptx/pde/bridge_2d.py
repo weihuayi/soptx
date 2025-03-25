@@ -77,6 +77,21 @@ class Bridge2dData1:
         # 铰支座允许旋转但不允许垂直位移
         return coord_left | coord_right
     
+    @cartesian
     def threshold(self) -> Tuple[Callable, Callable]:
         return (self.is_dirichlet_boundary_dof_x, 
                 self.is_dirichlet_boundary_dof_y)
+    
+    @cartesian
+    def is_fixed_point(self, point: TensorLike) -> TensorLike:
+        """判断给定坐标点是否需要保持为固体"""
+        domain = self.domain()
+        x, y = point[..., 0], point[..., 1]
+        
+        is_bottom = bm.abs(y - domain[2]) < self.eps
+        
+        is_left = bm.abs(x - domain[0]) < self.eps
+        is_right = bm.abs(x - domain[1]) < self.eps
+        is_middle = bm.abs(x - (domain[0] + domain[1])/2) < self.eps
+        
+        return (is_bottom & (is_left | is_right | is_middle))

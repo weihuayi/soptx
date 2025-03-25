@@ -171,9 +171,12 @@ class BasicFilter(ABC):
                         physical_dist = sqrt((i - k)**2 * hx**2 + (j - l)**2 * hy**2)
                         fac = rmin - physical_dist
                         if fac > 0:
-                            iH[cc] = row
-                            jH[cc] = col
-                            sH[cc] = max(0.0, fac)
+                            # iH[cc] = row
+                            # jH[cc] = col
+                            # sH[cc] = max(0.0, fac)
+                            iH = bm.set_at(iH, cc, row)
+                            jH = bm.set_at(jH, cc, col)
+                            sH = bm.set_at(sH, cc, max(0.0, fac))
                             cc += 1
 
         H = COOTensor(
@@ -226,9 +229,12 @@ class BasicFilter(ABC):
                                                 )
                                 fac = rmin - physical_dist
                                 if fac > 0:
-                                    iH[cc] = row
-                                    jH[cc] = col
-                                    sH[cc] = max(0.0, fac)
+                                    # iH[cc] = row
+                                    # jH[cc] = col
+                                    # sH[cc] = max(0.0, fac)
+                                    iH = bm.set_at(iH, cc, row)
+                                    jH = bm.set_at(jH, cc, col)
+                                    sH = bm.set_at(sH, cc, max(0.0, fac))
                                     cc += 1
 
         H = COOTensor(
@@ -292,10 +298,14 @@ class SensitivityBasicFilter(BasicFilter):
     
     def get_initial_density(self, x: TensorLike, xPhys: TensorLike) -> None:
         """灵敏度滤波器的初始物理密度等于设计变量"""
-        xPhys[:] = x
+        # xPhys[:] = x
+        xPhys = bm.set_at(xPhys, slice(None), x)
+        return xPhys
     
     def filter_variables(self, x: TensorLike, xPhys: TensorLike) -> None:
-        xPhys[:] = x
+        # xPhys[:] = x
+        xPhys = bm.set_at(xPhys, slice(None), x)
+        return xPhys
 
     def filter_objective_sensitivities(self, xPhys: TensorLike, dobj: TensorLike) -> None:
         # 计算密度加权的目标函数灵敏度
@@ -305,10 +315,12 @@ class SensitivityBasicFilter(BasicFilter):
         # 计算修正因子
         correction_factor = self._Hs * bm.maximum(bm.tensor(0.001, dtype=bm.float64), xPhys)
         # 过滤后的目标函数灵敏度
-        dobj[:] = filtered_dobj / correction_factor
+        # dobj[:] = filtered_dobj / correction_factor
+        dobj = bm.set_at(dobj, slice(None), filtered_dobj / correction_factor)
+        return dobj
 
     def filter_constraint_sensitivities(self, xPhys: TensorLike, dcons: TensorLike) -> None:
-        return
+        return dcons
 
 class DensityBasicFilter(BasicFilter):
     """密度滤波器"""
@@ -317,7 +329,9 @@ class DensityBasicFilter(BasicFilter):
     
     def get_initial_density(self, x: TensorLike, xPhys: TensorLike) -> None:
         """密度滤波器的初始物理密度等于设计变量"""
-        xPhys[:] = x
+        # xPhys[:] = x
+        xPhys = bm.set_at(xPhys, slice(None), x)
+        return xPhys
 
     def filter_variables(self, x: TensorLike, xPhys: TensorLike) -> None:
         '''
@@ -329,19 +343,25 @@ class DensityBasicFilter(BasicFilter):
         # 应用滤波矩阵
         filtered_x = self._H.matmul(weigthed_x)
         # 返回标准化后的密度
-        xPhys[:] = filtered_x / self._normalize_factor
+        # xPhys[:] = filtered_x / self._normalize_factor
+        xPhys = bm.set_at(xPhys, slice(None), filtered_x / self._normalize_factor)
+        return xPhys
 
     def filter_objective_sensitivities(self, xPhys: TensorLike, dobj: TensorLike) -> None:
         # 计算单元测度加权的目标函数灵敏度
         weighted_dobj = self._cell_measure * dobj
         # 应用滤波矩阵
-        dobj[:] = self._H.matmul(weighted_dobj / self._normalize_factor)
+        # dobj[:] = self._H.matmul(weighted_dobj / self._normalize_factor)
+        dobj = bm.set_at(dobj, slice(None), self._H.matmul(weighted_dobj / self._normalize_factor))
+        return dobj
 
     def filter_constraint_sensitivities(self, xPhys: TensorLike, dcons: TensorLike) -> None:
         # 计算单元测度加权的约束函数灵敏度
         weighted_dcons = self._cell_measure * dcons
         # 应用滤波矩阵
-        dcons[:] = self._H.matmul(weighted_dcons / self._normalize_factor)
+        # dcons[:] = self._H.matmul(weighted_dcons / self._normalize_factor)
+        dcons = bm.set_at(dcons, slice(None), self._H.matmul(weighted_dcons / self._normalize_factor))
+        return dcons
 
 class HeavisideProjectionBasicFilter(BasicFilter):
     """Heaviside 投影滤波器"""
@@ -367,16 +387,22 @@ class HeavisideProjectionBasicFilter(BasicFilter):
     def get_initial_density(self, x: TensorLike, xPhys: TensorLike) -> None:
         """Heaviside 投影滤波器的初始物理密度需要投影"""
         self._xTilde = x 
-        xPhys[:] = (1 - bm.exp(-self.beta * self._xTilde) + 
-                   self._xTilde * bm.exp(-self.beta))
+        # xPhys[:] = (1 - bm.exp(-self.beta * self._xTilde) + 
+        #           self._xTilde * bm.exp(-self.beta))
+        xPhys = bm.set_at(xPhys, slice(None), (1 - bm.exp(-self.beta * self._xTilde) + 
+                   self._xTilde * bm.exp(-self.beta)))
+        return xPhys
     
     def filter_variables(self, x: TensorLike, xPhys: TensorLike) -> None:
         weighted_x = self._cell_measure * x
         filtered_x = self._H.matmul(weighted_x)
         self._xTilde = filtered_x / self._normalize_factor
 
-        xPhys[:] = (1 - bm.exp(-self.beta * self._xTilde) + 
-                        self._xTilde * bm.exp(-self.beta))
+        # xPhys[:] = (1 - bm.exp(-self.beta * self._xTilde) + 
+        #                 self._xTilde * bm.exp(-self.beta))
+        xPhys = bm.set_at(xPhys, slice(None), (1 - bm.exp(-self.beta * self._xTilde) + 
+                        self._xTilde * bm.exp(-self.beta)))
+        return xPhys
 
     def filter_objective_sensitivities(self, 
                                     xPhys: TensorLike, dobj: TensorLike) -> None:        
@@ -384,7 +410,9 @@ class HeavisideProjectionBasicFilter(BasicFilter):
         dx = self.beta * bm.exp(-self.beta * self._xTilde) + bm.exp(-self.beta)
         # 修改灵敏度并应用密度滤波
         weighted_dobj = dobj * dx * self._cell_measure
-        dobj[:] = self._H.matmul(weighted_dobj / self._normalize_factor)
+        # dobj[:] = self._H.matmul(weighted_dobj / self._normalize_factor)
+        dobj = bm.set_at(dobj, slice(None), self._H.matmul(weighted_dobj / self._normalize_factor))
+        return dobj
 
     def filter_constraint_sensitivities(self, 
                                     xPhys: TensorLike, dcons: TensorLike) -> None:        
@@ -392,7 +420,10 @@ class HeavisideProjectionBasicFilter(BasicFilter):
         dx = self.beta * bm.exp(-self.beta * self._xTilde) + bm.exp(-self.beta)
         # 修改灵敏度并应用密度滤波
         weighted_dcons = dcons * dx * self._cell_measure
-        dcons[:] = self._H.matmul(weighted_dcons / self._normalize_factor)
+        # dcons[:] = self._H.matmul(weighted_dcons / self._normalize_factor)
+        dcons = bm.set_at(dcons, slice(None), self._H.matmul(weighted_dcons / self._normalize_factor))
+        return dcons
+
 
     def continuation_step(self, change: float) -> Tuple[float, bool]:
         """

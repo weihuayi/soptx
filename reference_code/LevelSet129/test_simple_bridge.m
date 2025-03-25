@@ -5,7 +5,6 @@ stepLength = 3;
 numReinit = 2;
 topWeight = 2;
 
-
 % Initialization
 struc = ones(nely, nelx);
 [lsf] = reinit(struc);

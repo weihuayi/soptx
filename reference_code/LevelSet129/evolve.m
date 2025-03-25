@@ -21,4 +21,5 @@ function [struc, lsf] = evolve(v, g, lsf, stepLength, w)
     end
     % New structure obtanied from lsf
     strucFULL = (lsf<0); struc = strucFULL(2:end-1, 2:end-1);
+    % strucFULL = (lsf>0); struc = strucFULL(2:end-1, 2:end-1);
 end

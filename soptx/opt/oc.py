@@ -153,7 +153,7 @@ class OCOptimizer(OptimizerBase):
         tensor_kwargs = bm.context(rho)
         rho_phys = bm.zeros_like(rho, **tensor_kwargs)
         if self.filter is not None:
-            self.filter.get_initial_density(rho, rho_phys)
+            rho_phys = self.filter.get_initial_density(rho, rho_phys)
         else:
             rho_phys[:] = rho
         
@@ -168,13 +168,13 @@ class OCOptimizer(OptimizerBase):
             obj_val = self.objective.fun(rho_phys)
             obj_grad = self.objective.jac(rho_phys)  # (NC, )
             if self.filter is not None:
-                self.filter.filter_objective_sensitivities(rho_phys, obj_grad)
+                obj_grad = self.filter.filter_objective_sensitivities(rho_phys, obj_grad)
 
             # 使用物理密度计算约束函数值梯度
             con_val = self.constraint.fun(rho_phys)
             con_grad = self.constraint.jac(rho_phys)  # (NC, )
             if self.filter is not None:
-                self.filter.filter_constraint_sensitivities(rho_phys, con_grad)
+                con_grad = self.filter.filter_constraint_sensitivities(rho_phys, con_grad)
 
             # 当前体积分数
             vol_frac = self.constraint.get_volume_fraction(rho_phys)
@@ -187,7 +187,7 @@ class OCOptimizer(OptimizerBase):
                 
                 # 计算新的物理密度
                 if self.filter is not None:
-                    self.filter.filter_variables(rho_new, rho_phys)
+                    rho_phys = self.filter.filter_variables(rho_new, rho_phys)
                 else:
                     rho_phys = rho_new
 

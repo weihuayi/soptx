@@ -45,6 +45,7 @@ for iterNum = 1:num
         la = -0.01; La = 1000; alpha = 0.9;
     else
         la = la - 1/La * (volCurr - volReq); La = alpha * La;
+        % la = la + 1/La * (volCurr - volReq); La = alpha * La;
     end
     % Include volume sensitivites
     shapeSens = shapeSens - la + 1/La*(volCurr-volReq);

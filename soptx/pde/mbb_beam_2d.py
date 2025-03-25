@@ -46,7 +46,8 @@ class MBBBeam2dData1:
         )
         kwargs = bm.context(points)
         val = bm.zeros(points.shape, **kwargs)
-        val[coord, 1] = self.T
+        # val[coord, 1] = self.T
+        val = bm.set_at(val, (coord, 1), self.T)
 
         return val
     

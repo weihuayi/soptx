@@ -20,7 +20,7 @@ from soptx.utils import timer
 @dataclass
 class TestConfig:
     """Configuration for topology optimization test cases."""
-    backend: Literal['numpy', 'pytorch']
+    backend: Literal['numpy', 'pytorch', 'jax']
     pde_type: Literal['cantilever_2d_1', 'cantilever_2d_2']
 
     elastic_modulus: float
@@ -51,6 +51,8 @@ def create_base_components(config: TestConfig):
         bm.set_backend('numpy')
     elif config.backend == 'pytorch':
         bm.set_backend('pytorch')
+    elif config.backend == 'jax':
+        bm.set_backend('jax')
 
     if config.pde_type == 'cantilever_2d_2':
         pde = Cantilever2dData2(
